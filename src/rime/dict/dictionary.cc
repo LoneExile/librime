@@ -152,6 +152,17 @@ void DictEntryIterator::AddFilter(DictEntryFilter filter) {
 
 an<DictEntry> DictEntryIterator::Peek() {
   if (!entry_ && !exhausted()) {
+    // smoodle patch: chunks are pushed in syllable-id order (alphabetical
+    // of syllable strings), not weight order. The first Peek() must sort
+    // to put the highest-weight chunk's head element first; Sort() is
+    // otherwise only called from FindNextEntry, leaving the #1 candidate
+    // mis-ordered when algebra-derived spellings happen to come before
+    // direct spellings alphabetically (e.g. "yaai" < "yai" → algebra-
+    // derived ย้าย out-ranked direct ใหญ่ regardless of weight).
+    if (chunk_index_ == 0 && !sorted_initial_) {
+      Sort();
+      sorted_initial_ = true;
+    }
     // get next entry from current chunk
     const auto& chunk = query_result_->chunks[chunk_index_];
     const auto& e = chunk.entries[chunk.cursor];

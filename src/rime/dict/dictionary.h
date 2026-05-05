@@ -49,6 +49,10 @@ class RIME_DLL DictEntryIterator : public DictEntryFilterBinder {
   size_t chunk_index_ = 0;
   an<DictEntry> entry_ = nullptr;
   size_t entry_count_ = 0;
+  // smoodle patch: track whether chunks have been sorted at least once.
+  // The original librime only sorts in FindNextEntry, leaving the very
+  // first Peek() returning chunks[0] in syllable-id-insertion order.
+  bool sorted_initial_ = false;
 };
 
 using DictEntryCollector = map<size_t, DictEntryIterator>;
