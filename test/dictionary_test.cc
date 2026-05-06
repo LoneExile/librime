@@ -59,11 +59,16 @@ TEST_F(RimeDictionaryTest, PredictiveLookup) {
   rime::DictEntryIterator it;
   dict_->LookupWords(&it, "z", true);
   ASSERT_FALSE(it.exhausted());
-  EXPECT_EQ("\xe5\x92\x8b", it.Peek()->text);  // 咋
+  // Expected top is the highest-weighted z* entry in the fixture.
+  // Pre-fix, this returned 咋 (za, weight 6923) because chunks were
+  // popped in syllable-id (alphabetical) order and Sort() didn't run
+  // until the second Peek. With the DictEntryIterator::Peek first-call
+  // sort fix, 则 (ze, weight 28270) correctly takes position #1.
+  EXPECT_EQ("\xe5\x88\x99", it.Peek()->text);  // 则
   ASSERT_EQ(1, it.Peek()->code.size());
   rime::RawCode raw_code;
   ASSERT_TRUE(dict_->Decode(it.Peek()->code, &raw_code));
-  EXPECT_EQ("za", raw_code.ToString());
+  EXPECT_EQ("ze", raw_code.ToString());
 }
 
 TEST_F(RimeDictionaryTest, ScriptLookup) {
