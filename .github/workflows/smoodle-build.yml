@@ -1,19 +1,23 @@
 name: smoodle-build
 
-# Builds the smoodle-patched librime fork as release artifacts.
+# Builds the smoodle-patched librime fork by delegating to upstream's
+# per-OS workflows (linux-build.yml / macos-build.yml / windows-build.yml).
 #
-# macOS arm64 is the canonical Phase 1 build (current dogfood target).
-# Windows x64 + Linux x64 are best-effort while Lane B / Lane C build
-# chains stabilise — `continue-on-error: true` keeps them from blocking
-# the macOS dogfood pipeline.
+# Why workflow_call: upstream's workflows already handle vcpkg bootstrap
+# on Windows, brew deps on macOS, apt deps on Linux, and per-arch flags.
+# Inlining `make release` / `build.bat` reinvented this and dropped the
+# Windows ball. Run 25425316371 (inline build) failed at `build.bat
+# thirdparty`; run 25428394245 (upstream's matrix on the same source)
+# passed all four Windows variants. The fix is to delegate.
 #
 # Triggers:
-#   - push to 1.16.0-smoodle* branches  → CI builds, uploads artifacts
-#   - push of 1.16.0-smoodle.* tags     → same + build is reproducible
-#   - workflow_dispatch (manual run)    → ad-hoc verification
+#   - push to 1.16.0-smoodle* branches  → CI validates on macOS, Linux,
+#                                         and Windows matrices
+#   - push of 1.16.0-smoodle.* tags     → reproducible build per release
+#   - workflow_dispatch                 → ad-hoc verification
 #
-# Artifacts retained for 30 days; promote to GitHub Releases manually
-# until Lane B / Lane C settle the per-OS distribution model.
+# Plugins: Phase 1 dogfood is dict-only. No `rime_plugins` parameter
+# until 1.5 lands the LLM / lua plugin work.
 
 on:
   push:
@@ -24,96 +28,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  macos-arm64:
-    name: macOS arm64 (canonical)
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+  macos:
+    uses: ./.github/workflows/macos-build.yml
 
-      - name: Install brew deps
-        run: |
-          brew install cmake boost leveldb marisa yaml-cpp opencc \
-                       googletest pkg-config ninja glog
+  linux:
+    uses: ./.github/workflows/linux-build.yml
 
-      - name: Build release
-        run: make release
-
-      - name: Verify dylib exists
-        run: |
-          test -f build/lib/librime.1.16.0.dylib
-          ls -la build/lib/librime*.dylib
-
-      - name: Upload dylib
-        uses: actions/upload-artifact@v4
-        with:
-          name: librime-macos-arm64
-          path: |
-            build/lib/librime.1.16.0.dylib
-            build/lib/librime.1.dylib
-            build/lib/librime.dylib
-          retention-days: 30
-          if-no-files-found: error
-
-  windows-x64:
-    name: Windows x64 (best-effort, Lane B WIP)
-    runs-on: windows-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Build thirdparty + release
-        shell: cmd
-        run: |
-          call build.bat thirdparty
-          call build.bat release
-
-      - name: Upload DLL
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: librime-windows-x64
-          path: |
-            dist/lib/rime.dll
-            build/lib/Release/rime.dll
-          retention-days: 30
-          if-no-files-found: warn
-
-  linux-x64:
-    name: Linux x64 (best-effort, Lane C WIP)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Install apt deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build pkg-config \
-            libboost-all-dev libleveldb-dev libmarisa-dev \
-            libyaml-cpp-dev libopencc-dev libgoogle-glog-dev \
-            libgtest-dev libgflags-dev libcapnp-dev capnproto
-
-      - name: Build release
-        run: make release
-
-      - name: Upload .so
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: librime-linux-x64
-          path: |
-            build/lib/librime.so.1.16.0
-            build/lib/librime.so.1
-            build/lib/librime.so
-          retention-days: 30
-          if-no-files-found: warn
+  windows:
+    uses: ./.github/workflows/windows-build.yml
